@@ -28,18 +28,24 @@ jobs:
 
           # Получаем список SHA коммитов
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            # Проверяем все коммиты в пушe
-            COMMIT_SHAS=$(git rev-list --no-merges $GITHUB_BEFORE..$GITHUB_SHA)
+            # Проверяем, есть ли $GITHUB_BEFORE
+            if [ -z "$GITHUB_BEFORE" ] || [ "$GITHUB_BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              # Новая ветка: берём только последний коммит
+              COMMIT_SHAS="$GITHUB_SHA"
+            else
+              # Обычный пуш: берём все коммиты в диапазоне
+              COMMIT_SHAS=$(git rev-list --no-merges $GITHUB_BEFORE..$GITHUB_SHA)
+            fi
           else
             # Для PR: подтягиваем базовую ветку и проверяем коммиты
             git fetch origin $GITHUB_BASE_REF:$GITHUB_BASE_REF
             COMMIT_SHAS=$(git rev-list --no-merges $GITHUB_BASE_REF..$GITHUB_HEAD_REF)
           fi
 
-          # Проверяем, что список коммитов не пустой
+          # Проверяем, есть ли коммиты для проверки
           if [ -z "$COMMIT_SHAS" ]; then
-            echo "❌ Ошибка: не найдено коммитов для проверки"
-            exit 1
+            echo "ℹ️ Нет коммитов для проверки, пропускаем"
+            exit 0
           fi
 
           # Проверяем каждый коммит
