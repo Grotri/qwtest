@@ -7,7 +7,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Полная история для точной проверки
+          fetch-depth: 0
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
@@ -25,41 +25,33 @@ jobs:
           2. Последняя строка: 'QW-52' (обязательно)
           3. Между ними может быть любой текст (игнорируется)"
 
-          # Отладка: показываем доступные ветки и контекст
           echo "🔍 Доступные ветки:"
           git branch -r
           echo "🔍 GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
           echo "🔍 GITHUB_BEFORE: $GITHUB_BEFORE"
           echo "🔍 GITHUB_SHA: $GITHUB_SHA"
 
-          # Получаем список SHA коммитов
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            # Получаем список коммитов из события push
             COMMIT_SHAS=$(jq -r '.commits[].id' "$GITHUB_EVENT_PATH")
           else
-            # Для PR: подтягиваем обе ветки (base и head)
             echo "🔍 GITHUB_BASE_REF: $GITHUB_BASE_REF"
             echo "🔍 GITHUB_HEAD_REF: $GITHUB_HEAD_REF"
             git fetch origin $GITHUB_BASE_REF:refs/heads/$GITHUB_BASE_REF
             git fetch origin $GITHUB_HEAD_REF:refs/heads/$GITHUB_HEAD_REF
-            # Отладка: показываем локальные ветки после fetch
             echo "🔍 Локальные ветки после fetch:"
             git branch
             COMMIT_SHAS=$(git rev-list --no-merges refs/heads/$GITHUB_BASE_REF..refs/heads/$GITHUB_HEAD_REF)
           fi
 
-          # Проверяем, есть ли коммиты для проверки
           if [ -z "$COMMIT_SHAS" ]; then
             echo "ℹ️ Нет коммитов для проверки, пропускаем"
             exit 0
           fi
 
-          # Отладка: показываем, сколько коммитов будет проверено
           echo "🔍 Найдено коммитов для проверки: $(echo "$COMMIT_SHAS" | wc -l)"
           echo "🔍 Список SHA коммитов:"
           echo "$COMMIT_SHAS"
 
-          # Проверяем каждый коммит
           for sha in $COMMIT_SHAS; do
             commit=$(git log -1 --format=%B "$sha")
             echo "🔍 Проверяем коммит $sha:"
@@ -67,12 +59,16 @@ jobs:
             echo "$commit"
             echo "---"
             
-            # Удаляем пустые строки
             cleaned_commit=$(echo "$commit" | sed '/^$/d')
             first_line=$(echo "$cleaned_commit" | head -n 1)
             last_line=$(echo "$cleaned_commit" | tail -n 1)
             
-            # Проверяем, что строки не пустые
+            # Пропускаем коммиты, начинающиеся с "Merge"
+            if [[ "$first_line" =~ ^Merge.* ]]; then
+              echo "ℹ️ Коммит $sha является merge-коммитом, пропускаем проверку"
+              continue
+            fi
+            
             if [ -z "$first_line" ] || [ -z "$last_line" ]; then
               echo "❌ Ошибка: коммит пустой или не содержит ожидаемых строк"
               echo "---"
