@@ -22,23 +22,28 @@ jobs:
           2. Последняя строка: 'QW-52' (обязательно)
           3. Между ними может быть любой текст (игнорируется)"
 
-          # Отладка: показываем доступные ветки
+          # Отладка: показываем доступные ветки и контекст
           echo "🔍 Доступные ветки:"
           git branch -r
+          echo "🔍 GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
+          echo "🔍 GITHUB_BEFORE: $GITHUB_BEFORE"
+          echo "🔍 GITHUB_SHA: $GITHUB_SHA"
 
           # Получаем список SHA коммитов
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            # Проверяем, есть ли $GITHUB_BEFORE
+            # Проверяем, есть ли $GITHUB_BEFORE и не нулевой ли он
             if [ -z "$GITHUB_BEFORE" ] || [ "$GITHUB_BEFORE" = "0000000000000000000000000000000000000000" ]; then
-              # Новая ветка: берём только последний коммит
-              COMMIT_SHAS="$GITHUB_SHA"
+              # Новая ветка: берём все коммиты до первого родителя
+              COMMIT_SHAS=$(git rev-list --no-merges --first-parent $GITHUB_SHA)
             else
               # Обычный пуш: берём все коммиты в диапазоне
-              COMMIT_SHAS=$(git rev-list --no-merges $GITHUB_BEFORE..$GITHUB_SHA)
+              COMMIT_SHAS=$(git rev-list --no-merges --first-parent $GITHUB_BEFORE..$GITHUB_SHA)
             fi
           else
             # Для PR: подтягиваем базовую ветку и проверяем коммиты
             git fetch origin $GITHUB_BASE_REF:$GITHUB_BASE_REF
+            echo "🔍 GITHUB_BASE_REF: $GITHUB_BASE_REF"
+            echo "🔍 GITHUB_HEAD_REF: $GITHUB_HEAD_REF"
             COMMIT_SHAS=$(git rev-list --no-merges $GITHUB_BASE_REF..$GITHUB_HEAD_REF)
           fi
 
