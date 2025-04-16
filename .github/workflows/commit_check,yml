@@ -1,0 +1,78 @@
+name: Conventional Commits Check
+on: [push, pull_request]
+
+jobs:
+  check-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Полная история для точной проверки
+
+      - name: Validate commit messages
+        run: |
+          TYPES="chore|docs|feat|fix|refactor|revert|style|test"
+          HEADER_PATTERN="^($TYPES)(\([a-z0-9-]+\))?:[[:space:]]*.+"
+          FOOTER_PATTERN="^[A-Z]+-[0-9]+$"
+          
+          ERROR_MSG="❌ Неверный формат коммита! Требования:
+          1. Первая строка: <тип>(<область>): <описание>
+             Пример: 'fix: исправить баг' или 'feat(api): добавить метод'
+             Допускается: 'fix: fix regex'
+          2. Последняя строка: 'QW-52' (обязательно)
+          3. Между ними может быть любой текст (игнорируется)"
+
+          # Отладка: показываем доступные ветки
+          echo "🔍 Доступные ветки:"
+          git branch -r
+
+          # Получаем список SHA коммитов
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # Проверяем все коммиты в пушe
+            COMMIT_SHAS=$(git rev-list --no-merges $GITHUB_BEFORE..$GITHUB_SHA)
+          else
+            # Для PR: подтягиваем базовую ветку и проверяем коммиты
+            git fetch origin $GITHUB_BASE_REF:$GITHUB_BASE_REF
+            COMMIT_SHAS=$(git rev-list --no-merges $GITHUB_BASE_REF..$GITHUB_HEAD_REF)
+          fi
+
+          # Проверяем, что список коммитов не пустой
+          if [ -z "$COMMIT_SHAS" ]; then
+            echo "❌ Ошибка: не найдено коммитов для проверки"
+            exit 1
+          fi
+
+          # Проверяем каждый коммит
+          for sha in $COMMIT_SHAS; do
+            commit=$(git log -1 --format=%B "$sha")
+            echo "🔍 Проверяем коммит $sha:"
+            echo "---"
+            echo "$commit"
+            echo "---"
+            
+            # Удаляем пустые строки
+            cleaned_commit=$(echo "$commit" | sed '/^$/d')
+            first_line=$(echo "$cleaned_commit" | head -n 1)
+            last_line=$(echo "$cleaned_commit" | tail -n 1)
+            
+            # Проверяем, что строки не пустые
+            if [ -z "$first_line" ] || [ -z "$last_line" ]; then
+              echo "❌ Ошибка: коммит пустой или не содержит ожидаемых строк"
+              echo "---"
+              echo "$commit"
+              echo "---"
+              echo "$ERROR_MSG"
+              exit 1
+            fi
+            
+            # Проверяем формат
+            if ! [[ "$first_line" =~ $HEADER_PATTERN ]] || ! [[ "$last_line" =~ $FOOTER_PATTERN ]]; then
+              echo "❌ Ошибка в коммите $sha:"
+              echo "---"
+              echo "$commit"
+              echo "---"
+              echo "$ERROR_MSG"
+              exit 1
+            fi
+            echo "✅ Коммит $sha валиден"
+          done
