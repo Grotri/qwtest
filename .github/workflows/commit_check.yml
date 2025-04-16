@@ -33,9 +33,9 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
             # Проверяем, есть ли $GITHUB_BEFORE и не нулевой ли он
             if [ -z "$GITHUB_BEFORE" ] || [ "$GITHUB_BEFORE" = "0000000000000000000000000000000000000000" ]; then
-              # Новая ветка: берём только коммиты из текущего пуша
-              # Используем git log для получения коммитов, добавленных в пушe
-              COMMIT_SHAS=$(git log --no-merges --pretty=%H $GITHUB_SHA --not $(git merge-base --all $GITHUB_SHA origin/main origin/develop 2>/dev/null || echo ""))
+              # Новая ветка: берём коммиты из текущего пуша
+              # Используем git rev-list с ограничением на $GITHUB_SHA
+              COMMIT_SHAS=$(git rev-list --no-merges --max-parents=1 $GITHUB_SHA)
             else
               # Обычный пуш: берём все коммиты в диапазоне
               COMMIT_SHAS=$(git rev-list --no-merges $GITHUB_BEFORE..$GITHUB_SHA)
@@ -70,4 +70,21 @@ jobs:
             # Проверяем, что строки не пустые
             if [ -z "$first_line" ] || [ -z "$last_line" ]; then
               echo "❌ Ошибка: коммит пустой или не содержит ожидаемых строк"
-              echo "---
+              echo "---"
+              echo "$commit"
+              echo "---"
+              echo "$ERROR_MSG"
+              exit 1
+            fi
+            
+            # Проверяем формат
+            if ! [[ "$first_line" =~ $HEADER_PATTERN ]] || ! [[ "$last_line" =~ $FOOTER_PATTERN ]]; then
+              echo "❌ Ошибка в коммите $sha:"
+              echo "---"
+              echo "$commit"
+              echo "---"
+              echo "$ERROR_MSG"
+              exit 1
+            fi
+            echo "✅ Коммит $sha валиден"
+          done
